@@ -1,0 +1,70 @@
+<script>
+	const targetMap = new Map()
+	let activeEffect = null
+
+	function track(target, key) {
+		if (activeEffect) {
+			let depsMap = targetMap.get(target)
+			if (!depsMap) {
+				targetMap.set(target, (depsMap = new Map()))
+			}
+			let dep = depsMap.get(key)
+			if (!dep) {
+				depsMap.set(key, (dep = new Set()))
+			}
+			dep.add(activeEffect)
+		}
+	}
+
+	function trigger(target, key) {
+		const depsMap = targetMap.get(target)
+		if (!depsMap) return
+		const dep = depsMap.get(key)
+		if (dep) {
+			dep.forEach(effect => {
+				effect()
+			})
+		}
+	}
+
+	function reactive(target) {
+		Object.keys(target).forEach(key => {
+			let value = target[key]
+
+			Object.defineProperty(target, key, {
+				get() {
+					track(target, key)
+					return value
+				},
+				set(newValue) {
+					if (newValue === value) return
+					value = newValue
+					trigger(target, key)
+				},
+			})
+		})
+	}
+
+	function watchEffect(effect) {
+		activeEffect = effect
+		effect()
+		activeEffect = null
+	}
+
+	let product = {
+		price: 10,
+		quantity: 4,
+	}
+	let sales = 0
+
+	reactive(product)
+
+	watchEffect(() => {
+		sales = product.price * product.quantity
+	})
+
+	console.log(sales) // 40
+
+	product.price = 20
+	console.log(sales) // 80
+</script>

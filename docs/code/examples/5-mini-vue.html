@@ -1,0 +1,81 @@
+<style>
+    .static {
+        margin: 5px;
+    }
+
+    .active {
+        font-size: 20px;
+    }
+
+    .error {
+        color: red;
+    }
+</style>
+
+<div id="app"></div>
+
+<script type="module">
+    import { reactive, watchEffect } from '../core/reactive.js'
+    import { createElement, mount, patch } from '../core/render.js'
+    import { parse, generate } from '../core/compile.js'
+
+    const template = `<div :class="[{ active: isActive }, errorClass]" class="static">
+                        <input type="text" name="input" value="hello world">
+                        <p>Message: {{ msg }}</p>
+                    </div>`
+
+    const proxyHandler = {
+        get(target, key) {
+            if (typeof key === 'string' && !(key in target)) {
+                return target.data[key]
+            }
+            return target[key]
+        },
+        set(target, key, value, receiver) {
+            if (typeof key === 'string' && !(key in target)) {
+                target.data[key] = value
+            } else {
+                target[key] = value
+            }
+            return true
+        },
+        has(target, key) {
+            return key in target || (typeof key === 'string' && key in target.data)
+        }
+    }
+
+    const ctx = {
+        data: reactive({
+            isActive: true,
+            errorClass: 'error',
+            msg: 'This is a message',
+        }),
+        _c: createElement,
+    }
+    const App = new Proxy(ctx, proxyHandler)
+
+    const ast = parse(template)
+    const render = generate(ast).render
+
+    function mountApp(component, container) {
+        let prevVnode = container.vnode
+        watchEffect(() => {
+            if (prevVnode == null) {
+                // 挂载生成的 VNode
+                prevVnode = container.vnode = render.call(component)
+                mount(prevVnode, container)
+            } else {
+                // 更新 VNode
+                const vnode = container.vnode = render.call(component)
+                patch(prevVnode, vnode)
+                prevVnode = vnode
+            }
+        })
+    }
+
+    const container = document.getElementById('app')
+    mountApp(App, container)
+
+    App.data.msg = 'A new message'
+    App.isActive = false
+</script>

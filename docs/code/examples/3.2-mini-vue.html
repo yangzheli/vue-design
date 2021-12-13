@@ -1,0 +1,49 @@
+<style>
+	.red {
+		color: red;
+	}
+
+	.green {
+		color: green;
+	}
+</style>
+<div id="app"></div>
+
+<script type="module">
+	import { reactive, watchEffect } from '../core/reactive.js'
+	import { h, mount, patch } from '../core/render.js'
+
+
+	// reactive + render
+	const App = {
+		data: reactive({
+			items: ['a', 'b', 'c']
+		}),
+		render() {
+			return h('div', { class: this.data.color || 'red' },
+				this.data.items.map((item, index) => h('div', { key: index }, item)))
+		}
+	}
+
+	function mountApp(component, container) {
+		let prevVnode = container.vnode
+		watchEffect(() => {
+			if (prevVnode == null) {
+				// 挂载生成的 VNode
+				prevVnode = container.vnode = component.render()
+				mount(prevVnode, container)
+			} else {
+				// 更新 VNode
+				const vnode = container.vnode = component.render()
+				patch(prevVnode, vnode)
+				prevVnode = vnode
+			}
+		})
+	}
+
+	const container = document.getElementById('app')
+	mountApp(App, container)
+
+	App.data.items = ['hello', 'world']
+	App.data.color = 'green'
+</script>

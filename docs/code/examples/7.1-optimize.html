@@ -1,0 +1,36 @@
+<style>
+    .static {
+        margin: 5px;
+    }
+
+    .active {
+        font-size: 20px;
+    }
+</style>
+
+<div id="app"></div>
+
+<script type="module">
+    import { createApp } from '../core/component.js'
+
+    const ctx = {
+        data: {
+            isActive: true,
+            msg: 'This is a message'
+        },
+        template: `<div>
+                        <div class="static">
+                            <p>hello world</p>
+                        </div>
+                        <div :class="{ active: isActive }">
+                            <p>Message: {{ msg }}</p>
+                        </div>
+                    </div>`
+    }
+    
+    const container = document.getElementById('app')
+    const app = createApp(ctx).mountApp(container)
+
+    app.msg = 'A new message'
+    app.isActive = false
+</script>

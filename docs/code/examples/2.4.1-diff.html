@@ -1,0 +1,158 @@
+<style>
+	.red {
+		color: red;
+	}
+
+	.green {
+		color: green;
+	}
+</style>
+<div id="app"></div>
+
+<script>
+	function isUndef(s) { return s === undefined }
+
+	function isDef(s) { return s !== undefined }
+
+	function h(tag, props, children) {
+		if (!children) children = []
+		if (Array.isArray(children)) {
+			for (let i = 0, len = children.length; i < len; i++) {
+				if (typeof children[i] === 'string') children[i] = h(undefined, undefined, children[i])
+			}
+		}
+		return { tag: tag, props: props, children: children }
+	}
+
+	function mount(vnode, container) {
+		if (vnode.tag) vnode.el = document.createElement(vnode.tag)
+		else vnode.el = document.createTextNode(vnode.child)
+		const el = vnode.el
+
+		// props
+		if (vnode.props) {
+			for (const key in vnode.props) {
+				const value = vnode.props[key]
+				if (key.startsWith('on')) {
+					el.addEventListener(key.slice(2).toLowerCase(), value)
+				} else {
+					el.setAttribute(key, vnode.props[key])
+				}
+			}
+		}
+
+		// children
+		if (vnode.children) {
+			if (typeof vnode.children === 'string') {
+				el.textContent = vnode.children
+			} else {
+				vnode.children.forEach(child => {
+					mount(child, el)
+				})
+			}
+		}
+
+		container.appendChild(el)
+	}
+
+	function patch(oldVnode, vnode) {
+		if (vnode === oldVnode) return
+		const el = (vnode.el = oldVnode.el)
+
+		if (isUndef(oldVnode.tag) && isUndef(vnode.tag)) {	// 文本节点
+			if (vnode.children !== oldVnode.children) el.textContent = vnode.children
+		} else if (vnode.tag === oldVnode.tag) {
+			// props
+			const oldProps = oldVnode.props || {}
+			const newProps = vnode.props || {}
+			for (const key in newProps) {
+				const oldValue = oldProps[key]
+				const newValue = newProps[key]
+				if (newValue !== oldValue) {
+					if (key.startsWith('on')) {
+						el.removeEventListener(key.slice(2).toLowerCase(), oldValue)
+						el.addEventListener(key.slice(2).toLowerCase(), newValue)
+					} else {
+						el.setAttribute(key, newValue)
+					}
+				}
+			}
+			for (const key in oldProps) {
+				if (!(key in newProps)) {
+					if (key.startsWith('on')) {
+						el.removeEventListener(key.slice(2).toLowerCase(), oldProps[key])
+					} else {
+						el.removeAttribute(key)
+					}
+				}
+			}
+
+			// children
+			const oldChildren = oldVnode.children
+			const newChildren = vnode.children
+			if (typeof oldChildren === 'string') {
+				if (typeof newChildren === 'string') {
+					if (newChildren !== oldChildren) {
+						el.textContent = newChildren
+					}
+				} else {
+					el.innerHTML = ''
+					newChildren.forEach(child => {
+						mount(child, el)
+					})
+				}
+			} else {
+				if (typeof newChildren === 'string') {
+					el.textContent = newChildren
+				} else {
+					updateChildren(el, oldChildren, newChildren)
+				}
+			}
+		} else {
+			const parent = el.parentNode
+			parent.removeChild(el)
+			mount(vnode, parent)
+		}
+	}
+
+	function updateChildren(parent, oldChildren, newChildren) {
+		const oldLen = oldChildren.length
+		const newLen = newChildren.length
+		const commonLen = Math.min(oldLen, newLen)
+
+		for (let i = 0; i < commonLen; i++) {
+			patch(oldChildren[i], newChildren[i])
+		}
+		if (oldLen > commonLen) {
+			for (let i = commonLen; i < oldLen; i++) {
+				parent.removeChild(oldChildren[i].el)
+			}
+		}
+		if (newLen > commonLen) {
+			for (let i = commonLen; i < newLen; i++) {
+				mount(oldChildren[i], parent)
+			}
+		}
+	}
+
+	const vnode = h(
+		'div', { class: 'red' }, [
+		h('div', null, 'a'),
+		h('div', null, 'b'),
+		h('div', null, 'c'),
+	]
+	)
+	const container = document.getElementById('app')
+
+	mount(vnode, container)
+
+	const newVnode = h(
+		'div', { class: 'green' }, [
+		h('div', null, 'a'),
+		h('div', null, 'b'),
+		h('div', null, 'd'),
+	]
+	)
+
+	patch(vnode, newVnode)
+</script>

@@ -1,0 +1,189 @@
+<style>
+    .static {
+        color: red;
+    }
+</style>
+
+<div id="app"></div>
+
+<script type="module">
+    import { h, mount } from '../core/render.js'
+
+    const empty = ['area', 'base', 'basefont', 'br', 'col', 'frame', 'hr', 'img', 'input',
+        'link', 'meta', 'param', 'embed', 'command', 'keygen', 'source', 'track', 'wbr']
+
+    const startTag = /^<([A-Za-z0-9]+)((?:\s+[A-Za-z:@][-A-Za-z0-9:]*(?:\s*=\s*(?:(?:"[^"]*")|(?:'[^']*')))?)*)\s*(\/?)>/
+    const endTag = /^<\/([A-Za-z0-9]+)>/
+    const attr = /([A-Za-z:@][-A-Za-z0-9:]*)(?:\s*=\s*(?:(?:"((?:\\.|[^"])*)")|(?:'((?:\\.|[^'])*)')))?/g
+    const onRE = /^(@|v-on:)(\w)/
+    const bindRE = /^(:|v-bind:)(\w)/
+    const tagRE = /\{\{((?:.|\r?\n)+?)\}\}/g
+
+    function parse(template) {
+        let root = null
+        let stack = []
+        parseHTML(template, {
+            start(tag, attrs, unary, hasBindings) {   // start tag
+                let element = { tag, attrs, children: [], hasBindings, type: 1 }
+                if (!root) root = element
+                if (stack.length) {
+                    let parent = stack[stack.length - 1]
+                    parent.children.push(element)
+                }
+                if (!unary) stack.push(element)
+            },
+            end() { // end tag
+                stack.pop()
+            },
+            chars(text) {   // chars
+                if (text.trim()) {
+                    let tokens = []
+                    let lastIndex = 0
+                    let match, index
+                    let hasBindings = false
+                    while ((match = tagRE.exec(text))) {
+                        hasBindings = true
+                        index = match.index
+                        if (index > lastIndex) {
+                            const tokenValue = text.slice(lastIndex, index)
+                            tokens.push(JSON.stringify(tokenValue))
+                        }
+                        tokens.push(match[1].trim())
+                        lastIndex = index + match[0].length
+                    }
+                    const expression = tokens.join('+')
+                    let parent = stack[stack.length - 1]
+                    parent.children.push({ text: expression ? expression : text, type: 2, hasBindings })
+                }
+            }
+        })
+        return root
+    }
+
+    function parseHTML(html, handler) {
+        let index = 0
+        let match = null
+        let last = html
+
+        while (html) {
+            let chars = true
+            if (html.indexOf('<!--') == 0) {    // comment
+                index = html.indexOf('-->')
+                if (index >= 0) {
+                    if (handler.comment) handler.comment(html.substring(4, index))
+                    html = html.substring(index + 3)
+                    chars = false
+                }
+            } else if (html.indexOf('</') == 0) {   // end tag
+                match = html.match(endTag)
+                if (match) {
+                    html = html.substring(match[0].length)
+                    match[0].replace(endTag, parseEndTag)
+                    chars = false
+                }
+            } else if (html.indexOf('<') == 0) {    // start tag 
+                match = html.match(startTag)
+                if (match) {
+                    html = html.substring(match[0].length)
+                    match[0].replace(startTag, parseStartTag)
+                    chars = false
+                }
+            }
+
+            // chars
+            if (chars) {
+                index = html.indexOf('<')
+                let text = index < 0 ? html : html.substring(0, index)
+                html = index < 0 ? "" : html.substring(index)
+                if (handler.chars) handler.chars(text)
+            }
+
+            if (html == last) throw "Parse Error"
+            last = html
+        }
+
+        function parseStartTag(tag, tagName, rest, unary) {
+            unary = empty.indexOf(tagName) > 0 || !!unary
+            if (handler.start) {
+                let attrs = []
+                let hasBindings = false
+                rest.replace(attr, function (match, name, value) {
+                    let dynamic = false
+                    if (onRE.test(name)) {
+                        dynamic = true
+                        name = name.replace(onRE, function (all, prefix, letter) {
+                            return 'binding' + letter.toUpperCase()
+                        })
+                    } else if (bindRE.test(name)) {
+                        dynamic = true
+                        name = name.replace(bindRE, function (all, prefix, letter) {
+                            return 'binding' + letter.toUpperCase()
+                        })
+                    }
+                    hasBindings ||= dynamic
+                    attrs.push({
+                        name: name,
+                        value: value,
+                        dynamic: dynamic
+                    })
+                })
+                handler.start(tagName, attrs, unary, hasBindings)
+            }
+        }
+
+        function parseEndTag(tag, tagName) {
+            if (handler.end) handler.end();
+        }
+    }
+
+    function generate(ast) {
+        const code = "with(this){return " + genElement(ast) + "}"
+        return {
+            code: code,
+            render: new Function(code)
+        }
+    }
+
+    function genElement(node) {
+        // attrs
+        let props = ''
+        if (node.attrs) {
+            for (let i = 0, len = node.attrs.length; i < len; i++) {
+                let attr = node.attrs[i]
+                props += attr.name + ":'" + attr.value + "'"
+                if (i < len - 1) props += ","
+            }
+        }
+
+        // children
+        let children = node.children.map(child => {
+            if (child.type === 1) return genElement(child)
+            else return genText(child)
+        })
+
+        // code
+        return "h('" + node.tag + "'," + (props ? ("{" + props + "}") : null) + "," +
+            (children && children.length ? ("[" + children + "]") : null) + ")"
+    }
+
+    function genText(node) {
+        return node.hasBindings ? node.text : JSON.stringify(node.text)
+    }
+
+    const template = `<div class="static">
+                        <input type="text" name="input" value="hello world">
+                        <p>Message: {{ msg }}</p>
+                    </div>`
+
+    const ast = parse(template)
+    const render = generate(ast).render
+
+    const vm = {
+        msg: 'This is a message',
+        h: h
+    }
+    const vnode = render.call(vm)
+
+    const container = document.getElementById('app')
+    mount(vnode, container)
+</script>

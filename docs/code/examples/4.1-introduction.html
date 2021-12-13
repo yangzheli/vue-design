@@ -1,0 +1,14 @@
+<script src="https://unpkg.com/vue@next"></script>
+
+<div id="app">
+	<div>Hello world</div>
+</div>
+
+<script>
+    const { compile } = Vue
+
+    const app = document.getElementById('app')
+
+	const render = compile(app)
+    console.log(render)
+</script>

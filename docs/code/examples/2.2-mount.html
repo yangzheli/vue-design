@@ -1,0 +1,63 @@
+<style>
+	.red {
+		color: red;
+	}
+</style>
+<div id="app"></div>
+
+<script>
+	function h(tag, props, children) {
+		if (!children) children = []
+		if (Array.isArray(children)) {
+			for (let i = 0, len = children.length; i < len; i++) {
+				if (typeof children[i] === 'string') children[i] = h(undefined, undefined, children[i])
+			}
+		}
+		return { tag: tag, props: props, children: children }
+	}
+
+	function mount(vnode, container) {
+		if (vnode.tag) vnode.el = document.createElement(vnode.tag)
+		else vnode.el = document.createTextNode(vnode.child)
+		const el = vnode.el
+
+		// props
+		if (vnode.props) {
+			for (const key in vnode.props) {
+				const value = vnode.props[key]
+				if (key.startsWith('on')) {
+					el.addEventListener(key.slice(2).toLowerCase(), value)
+				} else {
+					el.setAttribute(key, vnode.props[key])
+				}
+			}
+		}
+
+		// children
+		if (vnode.children) {
+			if (typeof vnode.children === 'string') {
+				el.textContent = vnode.children
+			} else {
+				vnode.children.forEach(child => {
+					mount(child, el)
+				})
+			}
+		}
+
+		container.appendChild(el)
+	}
+
+	const vnode = h(
+		'div',
+		{
+			class: 'red',
+			onClick: () => {
+				alert('The div was clicked.')
+			},
+		},
+		[h('div', null, 'hello world')]
+	)
+	const container = document.getElementById('app')
+
+	mount(vnode, container)
+</script>

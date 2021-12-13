@@ -1,0 +1,221 @@
+<style>
+	.red {
+		color: red;
+	}
+
+	.green {
+		color: green;
+	}
+</style>
+<div id="app"></div>
+
+<script>
+	function isUndef(s) { return s === undefined }
+
+	function isDef(s) { return s !== undefined }
+
+	function h(tag, props, children) {
+		const key = props ? props.key : undefined
+		if (!children) children = []
+		if (Array.isArray(children)) {
+			for (let i = 0, len = children.length; i < len; i++) {
+				if (typeof children[i] === 'string') children[i] = h(undefined, undefined, children[i])
+			}
+		}
+		return { tag: tag, props: props, children: children, key: key }
+	}
+
+	function mount(vnode, container) {
+		if (vnode.tag) vnode.el = document.createElement(vnode.tag)
+		else vnode.el = document.createTextNode(vnode.child)
+		const el = vnode.el
+
+		// props
+		if (vnode.props) {
+			for (const key in vnode.props) {
+				const value = vnode.props[key]
+				if (key.startsWith('on')) {
+					el.addEventListener(key.slice(2).toLowerCase(), value)
+				} else {
+					el.setAttribute(key, vnode.props[key])
+				}
+			}
+		}
+
+		// children
+		if (vnode.children) {
+			if (typeof vnode.children === 'string') {
+				el.textContent = vnode.children
+			} else {
+				vnode.children.forEach(child => {
+					mount(child, el)
+				})
+			}
+		}
+
+		container.appendChild(el)
+	}
+
+	function patch(oldVnode, vnode) {
+		if (vnode === oldVnode) return
+		const el = (vnode.el = oldVnode.el)
+
+		if (isUndef(oldVnode.tag) && isUndef(vnode.tag)) {	// 文本节点
+			if (vnode.children !== oldVnode.children) el.textContent = vnode.children
+		} else if (vnode.tag === oldVnode.tag) {
+			// props
+			const oldProps = oldVnode.props || {}
+			const newProps = vnode.props || {}
+			for (const key in newProps) {
+				const oldValue = oldProps[key]
+				const newValue = newProps[key]
+				if (newValue !== oldValue) {
+					if (key.startsWith('on')) {
+						el.removeEventListener(key.slice(2).toLowerCase(), oldValue)
+						el.addEventListener(key.slice(2).toLowerCase(), newValue)
+					} else {
+						el.setAttribute(key, newValue)
+					}
+				}
+			}
+			for (const key in oldProps) {
+				if (!(key in newProps)) {
+					if (key.startsWith('on')) {
+						el.removeEventListener(key.slice(2).toLowerCase(), oldProps[key])
+					} else {
+						el.removeAttribute(key)
+					}
+				}
+			}
+
+			// children
+			const oldChildren = oldVnode.children
+			const newChildren = vnode.children
+			if (typeof oldChildren === 'string') {
+				if (typeof newChildren === 'string') {
+					if (newChildren !== oldChildren) {
+						el.textContent = newChildren
+					}
+				} else {
+					el.innerHTML = ''
+					newChildren.forEach(child => {
+						mount(child, el)
+					})
+				}
+			} else {
+				if (typeof newChildren === 'string') {
+					el.textContent = newChildren
+				} else {
+					updateChildren(el, oldChildren, newChildren)
+				}
+			}
+		} else {
+			const parent = el.parentNode
+			parent.removeChild(el)
+			mount(vnode, parent)
+		}
+	}
+
+	function updateChildren(parent, oldChildren, newChildren) {
+		let oldStartIdx = 0
+		let oldEndIdx = oldChildren.length - 1
+		let newStartIdx = 0
+		let newEndIdx = newChildren.length - 1
+
+		let oldStartVnode = oldChildren[0]
+		let oldEndVnode = oldChildren[oldEndIdx]
+		let newStartVnode = newChildren[0]
+		let newEndVnode = newChildren[newEndIdx]
+
+		let oldKeyToIdx = {}
+		for (let i = 0; i <= oldEndIdx; i++) {
+			const key = oldChildren[i].key
+			if (key !== undefined) {
+				oldKeyToIdx[key] = i
+			}
+		}
+
+		while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+			if (oldStartVnode === null) {
+				oldStartVnode = oldChildren[++oldStartIdx]
+			} else if (oldEndVnode === null) {
+				oldEndVnode = oldChildren[--oldEndIdx]
+			} else if (oldStartVnode.key === newStartVnode.key) {
+				patch(oldStartVnode, newStartVnode)
+				oldStartVnode = oldChildren[++oldStartIdx]
+				newStartVnode = newChildren[++newStartIdx]
+			} else if (oldEndVnode.key === newEndVnode.key) {
+				patch(oldEndVnode, newEndVnode)
+				oldEndVnode = oldChildren[--oldEndIdx]
+				newEndVnode = newChildren[--newEndIdx]
+			} else if (oldEndVnode.key === newStartVnode.key) {
+				patch(oldEndVnode, newStartVnode)
+				// 移动节点
+				parent.insertBefore(oldEndVnode.el, oldStartVnode.el)
+				oldEndVnode = oldChildren[--oldEndIdx]
+				newStartVnode = newChildren[++newStartIdx]
+			} else if (oldStartVnode.key === newEndVnode.key) {
+				patch(oldStartVnode, newEndVnode)
+				// 移动节点
+				parent.insertBefore(oldStartVnode.el, oldEndVnode.el.nextSibling)
+				oldStartVnode = oldChildren[++oldStartIdx]
+				newEndVnode = newChildren[--newEndIdx]
+			} else {
+				// 头部或尾部没有找到 key 相同的节点
+				const indexInOld = oldKeyToIdx[newStartVnode.key]
+				if (!indexInOld) {
+					mount(newStartVnode, parent)
+					parent.insertBefore(newStartVnode.el, oldStartVnode.el)
+				} else {
+					elemToMove = oldChildren[indexInOld]
+					patch(elemToMove, newStartVnode)
+					oldChildren[indexInOld] = null
+					parent.insertBefore(elemToMove.el, oldStartVnode.el)
+				}
+				newStartVnode = newChildren[++newStartIdx]
+			}
+		}
+
+		if (oldStartIdx > oldEndIdx) {
+			// 添加新节点
+			for (; newStartIdx <= newEndIdx; ++newStartIdx) {
+				newStartVnode = newChildren[newStartIdx]
+				mount(newStartVnode, parent)
+				const node = newChildren[newEndIdx + 1] == null ? null : newChildren[newEndIdx + 1].el
+				parent.insertBefore(newStartVnode.el, node)
+			}
+		} else if (newStartIdx > newEndIdx) {
+			// 移除不存在的节点
+			for (; oldStartIdx <= oldEndIdx; ++oldStartIdx) {
+				oldStartVnode = oldChildren[oldStartIdx]
+				parent.removeChild(oldStartVnode.el)
+			}
+		}
+	}
+
+	const vnode = h(
+		'div', { class: 'red' }, [
+		h('div', { key: 'a' }, 'a'),
+		h('div', { key: 'b' }, 'b'),
+		h('div', { key: 'e' }, 'e'),
+		h('div', { key: 'd' }, 'd'),
+		h('div', { key: 'c' }, 'c'),
+	]
+	)
+	const container = document.getElementById('app')
+
+	mount(vnode, container)
+
+	const newVnode = h(
+		'div', { class: 'green' }, [
+		h('div', { key: 'b' }, 'b'),
+		h('div', { key: 'c' }, 'c'),
+		h('div', { key: 'a' }, 'a'),
+		h('div', { key: 'd' }, 'd'),
+		h('div', { key: 'f' }, 'f'),
+		h('div', { key: 'g' }, 'g'),
+	]
+	)
+
+	patch(vnode, newVnode)
+</script>

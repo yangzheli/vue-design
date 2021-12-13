@@ -1,0 +1,27 @@
+<div id="app"></div>
+
+<script type="module">
+    import { createApp } from '../core/component.js'
+
+    const app = createApp({
+        data: {
+            msg: 'This is a message'
+        },
+        template: `<div>
+                        <div>{{ msg }}</div>
+                        <HelloWorld></HelloWorld>
+                    </div>`
+    })
+    
+    app.component('HelloWorld',{
+        data: {
+            msg: 'hello world'
+        },
+        template: `<div>{{ msg }}</div>`
+    })
+
+    const container = document.getElementById('app')
+    const vm = app.mountApp(container)
+
+    vm.msg = 'A new message'
+</script>
